@@ -1,0 +1,14 @@
+**
+!pom.xml
+!mvnw
+!.mvn/
+!.mvn/**
+!src/
+!src/main/
+!src/main/**
+**/application-local*
+**/.env*
+**/*.pem
+**/*.key
+**/*service-account*.json
+**/*service_account*.json

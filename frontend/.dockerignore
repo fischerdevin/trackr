@@ -1,0 +1,13 @@
+**
+!package.json
+!package-lock.json
+!index.html
+!vite.config.js
+!Caddyfile
+!src/
+!src/**
+!public/
+!public/**
+**/.env*
+**/*.pem
+**/*.key

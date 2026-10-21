@@ -1,0 +1,115 @@
+name: trackr
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trackr}
+      POSTGRES_USER: ${POSTGRES_USER:-trackr}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    image: trackr-backend:local
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production,mail}
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-trackr}
+      DB_USERNAME: ${POSTGRES_USER:-trackr}
+      FRONTEND_URL: https://${APP_DOMAIN:?Set APP_DOMAIN in .env}
+      MAIL_HOST: ${MAIL_HOST:-smtp-relay.brevo.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:?Set the Brevo SMTP login in .env}
+      MAIL_FROM: ${MAIL_FROM:?Set your verified sender in .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    secrets:
+      - db_password
+      - mail_password
+      - google_client_secret
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - web
+      - database
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    stop_grace_period: 30s
+    logging: *logging
+
+  frontend:
+    image: trackr-frontend:local
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN in .env}
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - web
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    logging: *logging
+
+networks:
+  web:
+  database:
+    internal: true
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  db_password:
+    file: ./.secrets/docker/db_password
+  mail_password:
+    file: ./.secrets/docker/mail_password
+  google_client_secret:
+    file: ./.secrets/docker/google_client_secret
